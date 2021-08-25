@@ -39,6 +39,13 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     /// the color for the background of the chart-drawing area (everything behind the grid lines).
     @objc open var gridBackgroundColor = NSUIColor(red: 240/255.0, green: 240/255.0, blue: 240/255.0, alpha: 1.0)
     
+    @objc open var removeHighlightedWhenTouchReleased = false {
+        didSet {
+            _tapGestureRecognizer.isEnabled = !removeHighlightedWhenTouchReleased;
+            _longPressGestureRecognizer.isEnabled = removeHighlightedWhenTouchReleased;
+        }
+    }
+    
     @objc open var borderColor = NSUIColor.black
     @objc open var borderLineWidth: CGFloat = 1.0
     
@@ -88,6 +95,7 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
     @objc open lazy var xAxisRenderer = XAxisRenderer(viewPortHandler: viewPortHandler, axis: xAxis, transformer: _leftAxisTransformer)
 
     internal var _tapGestureRecognizer: NSUITapGestureRecognizer!
+    internal var _longPressGestureRecognizer: NSUILongPressGestureRecognizer!
     internal var _doubleTapGestureRecognizer: NSUITapGestureRecognizer!
     #if !os(tvOS)
     internal var _pinchGestureRecognizer: NSUIPinchGestureRecognizer!
@@ -122,6 +130,8 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
         self.highlighter = ChartHighlighter(chart: self)
         
         _tapGestureRecognizer = NSUITapGestureRecognizer(target: self, action: #selector(tapGestureRecognized(_:)))
+        _longPressGestureRecognizer = NSUILongPressGestureRecognizer(target: self, action: #selector(longPressGestureRecognized(_:)))
+        _longPressGestureRecognizer.minimumPressDuration = 0
         _doubleTapGestureRecognizer = NSUITapGestureRecognizer(target: self, action: #selector(doubleTapGestureRecognized(_:)))
         _doubleTapGestureRecognizer.nsuiNumberOfTapsRequired = 2
         _panGestureRecognizer = NSUIPanGestureRecognizer(target: self, action: #selector(panGestureRecognized(_:)))
@@ -129,9 +139,12 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
         _panGestureRecognizer.delegate = self
         
         self.addGestureRecognizer(_tapGestureRecognizer)
+        self.addGestureRecognizer(_longPressGestureRecognizer)
         self.addGestureRecognizer(_doubleTapGestureRecognizer)
         self.addGestureRecognizer(_panGestureRecognizer)
         
+        _tapGestureRecognizer.isEnabled = !removeHighlightedWhenTouchReleased;
+        _longPressGestureRecognizer.isEnabled = removeHighlightedWhenTouchReleased;
         _doubleTapGestureRecognizer.isEnabled = _doubleTapToZoomEnabled
         _panGestureRecognizer.isEnabled = _dragXEnabled || _dragYEnabled
 
@@ -552,6 +565,30 @@ open class BarLineChartViewBase: ChartViewBase, BarLineScatterCandleBubbleChartD
                 lastHighlighted = h
                 highlightValue(h, callDelegate: true)
             }
+        }
+    }
+    
+    @objc private func longPressGestureRecognized(_ recognizer: NSUITapGestureRecognizer)
+    {
+        if data === nil
+        {
+            return
+        }
+        
+        if recognizer.state == NSUIGestureRecognizerState.began ||
+            recognizer.state == NSUIGestureRecognizerState.changed
+        {
+            if !isHighLightPerTapEnabled { return }
+            
+            let highlight = getHighlightByTouchPoint(recognizer.location(in: self))
+            
+            if highlight != self.lastHighlighted {
+                lastHighlighted = highlight
+                highlightValue(highlight, callDelegate: true)
+            }
+        } else if recognizer.state == NSUIGestureRecognizerState.ended {
+            highlightValue(nil, callDelegate: true)
+            setNeedsDisplay()
         }
     }
     
